@@ -1,0 +1,146 @@
+1. Loading and Modifying Pre-trained ResNet18 
+This code loads the pre-trained ResNet18 model from torchvision, modifies its fully connected 
+layer for binary classification, and freezes its earlier layers for fine-tuning. 
+import torch 
+import torchvision.models as models 
+import torch.nn as nn 
+Load pre-trained ResNet18 model 
+resnet18 = models.resnet18(pretrained=True) 
+Freeze early layers to retain learned features 
+for param in resnet18.parameters(): 
+param.requires_grad = False 
+Modify the final fully connected layer for binary classification 
+num_features = resnet18.fc.in_features 
+resnet18.fc = nn.Linear(num_features, 2)  Binary classification: landslide or 
+non-landslide 
+43 
+2. Fine-Tuning with a Custom Training Loop 
+This training loop optimizes the model’s performance on the dataset. 
+Define loss function and optimizer 
+criterion = nn.CrossEntropyLoss() 
+optimizer = torch.optim.Adam(resnet18.fc.parameters(), lr=0.001) 
+Training loop 
+for epoch in range(num_epochs): 
+resnet18.train() 
+for images, labels in train_loader: 
+optimizer.zero_grad() 
+outputs = resnet18(images) 
+loss = criterion(outputs, labels) 
+loss.backward() 
+optimizer.step() 
+Autoencoder 
+1. Defining the Autoencoder Architecture 
+This code defines the encoder and decoder parts of an autoencoder to reduce the image dimensions 
+and then reconstruct the original image. 
+class Autoencoder(nn.Module): 
+def   init  (self): 
+super(Autoencoder, self).  init  () 
+Encoder 
+44 
+self.encoder = nn.Sequential( 
+nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1), 
+nn.ReLU(), 
+nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1), 
+nn.ReLU() 
+) 
+Decoder 
+self.decoder = nn.Sequential( 
+nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1), 
+nn.ReLU(), 
+nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1), 
+nn.Sigmoid() 
+) 
+def forward(self, x): 
+x = self.encoder(x) 
+x = self.decoder(x) 
+return x 
+Instantiate the autoencoder model 
+autoencoder = Autoencoder() 
+2. Training the Autoencoder 
+The training loop minimizes the reconstruction loss, which helps the autoencoder learn to 
+distinguish between landslide and non-landslide images based on reconstruction quality. 
+Define loss function and optimizer 
+criterion = nn.MSELoss() 
+optimizer = torch.optim.Adam(autoencoder.parameters(), lr=0.001) 
+45 
+Training loop 
+for epoch in range(num_epochs): 
+for images, _ in train_loader: 
+optimizer.zero_grad() 
+outputs = autoencoder(images) 
+loss = criterion(outputs, images) 
+loss.backward() 
+optimizer.step() 
+Attention Mechanism 
+1. Defining a Simple Attention Layer 
+This simple spatial attention mechanism calculates weights for different regions in an image, 
+emphasizing relevant parts. 
+class SpatialAttention(nn.Module): 
+def   init  (self): 
+super(SpatialAttention, self).  init  () 
+self.conv = nn.Conv2d(2, 1, kernel_size=7, padding=3) 
+self.sigmoid = nn.Sigmoid() 
+def forward(self, x): 
+max_pool = torch.max(x, dim=1, keepdim=True)[0] 
+avg_pool = torch.mean(x, dim=1, keepdim=True) 
+concat = torch.cat([max_pool, avg_pool], dim=1) 
+attention_map = self.sigmoid(self.conv(concat)) 
+46 
+return x * attention_map 
+2. Integrating Attention into ResNet18 
+Here’s how to add an attention layer into ResNet18’s feature extraction layers, providing focus on 
+crucial regions. 
+Example: Add attention after a convolutional block in ResNet18 
+class ResNetWithAttention(nn.Module): 
+def   init  (self): 
+super(ResNetWithAttention, self).  init  () 
+self.resnet18 = models.resnet18(pretrained=True) 
+self.spatial_attention = SpatialAttention() 
+Modify the final layer for binary classification 
+num_features = self.resnet18.fc.in_features 
+self.resnet18.fc = nn.Linear(num_features, 2) 
+def forward(self, x): 
+Extract features and apply attention 
+x = self.resnet18.conv1(x) 
+x = self.resnet18.bn1(x) 
+x = self.resnet18.relu(x) 
+x = self.spatial_attention(x) 
+Continue forward pass 
+x = self.resnet18.avgpool(x) 
+x = torch.flatten(x, 1) 
+x = self.resnet18.fc(x) 
+47 
+return x 
+Instantiate model with attention 
+model_with_attention = ResNetWithAttention() 
+Testing & Evaluation Code 
+1. Evaluation Metrics 
+This snippet shows how to calculate accuracy, precision, recall, and F1-score for your model’s 
+predictions. 
+from sklearn.metrics import accuracy_score, precision_score, recall_score, 
+f1_score 
+Assuming 'preds' are model predictions and 'labels' are true labels 
+accuracy = accuracy_score(labels, preds) 
+precision = precision_score(labels, preds) 
+recall = recall_score(labels, preds) 
+f1 = f1_score(labels, preds) 
+print(f"Accuracy: {accuracy:.2f}") 
+print(f"Precision: {precision:.2f}") 
+print(f"Recall: {recall:.2f}") 
+print(f"F1 Score: {f1:.2f}") 
+48 
+2. Generating Attention Maps for Visualization 
+This final snippet creates attention maps for visual evaluation, helpful for highlighting areas where 
+the model focuses. 
+import matplotlib.pyplot as plt 
+def visualize_attention(model, image): 
+with torch.no_grad(): 
+attention_map = model.spatial_attention(image).cpu().numpy() 
+plt.imshow(attention_map[0], cmap='jet', alpha=0.5) 
+plt.title("Attention Map") 
+plt.colorbar() 
+plt.show() 
+Pass an example image through the model and visualize 
+example_image = torch.unsqueeze(image, 0)  Assuming 'image' is a preprocessed 
+tensor 
+visualize_attention(model_with_attention, example_image)
